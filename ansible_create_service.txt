@@ -1,0 +1,32 @@
+---
+- name: Create and Start a New Service from a Binary URL
+  hosts: all
+  become: yes  # Necessary for managing services and writing to system directories
+  vars:
+    binary_url: "http://example.com/your-binary"
+    binary_path: "/usr/local/bin/your-binary"
+    service_name: "your-service"
+    service_config_url: "http://example.com/your-service.service"
+
+  tasks:
+    - name: Download binary from URL
+      ansible.builtin.get_url:
+        url: "{{ binary_url }}"
+        dest: "{{ binary_path }}"
+        mode: '0755'
+
+    - name: Download service configuration from URL
+      ansible.builtin.get_url:
+        url: "{{ service_config_url }}"
+        dest: "/etc/systemd/system/{{ service_name }}.service"
+        mode: '0644'
+
+    - name: Reload systemd to recognize new service
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Start and enable new service
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+        state: started
+        enabled: yes

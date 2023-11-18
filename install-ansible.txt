@@ -1,0 +1,7 @@
+
+sudo apt install ansible
+sudo apt-get install -y sshpass
+export ANSIBLE_HOST_KEY_CHECKING=False
+
+for runing 
+ansible-playbook -i hosts conf.yml
