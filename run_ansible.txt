@@ -1,0 +1,1 @@
+ansible-playbook setup_wordpress.yml -i inventory.ini

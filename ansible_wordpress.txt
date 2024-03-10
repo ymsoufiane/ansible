@@ -1,0 +1,134 @@
+---
+- name: Prepare WordPress environment on Ubuntu
+  hosts: web_servers
+  become: yes
+  vars:
+    mysql_root_password: "mysql_pass"
+    mysql_db: wordpress_db
+    mysql_user: wordpress_user
+    mysql_password: "mysql_user_password"
+    wordpress_url: "https://wordpress.org/latest.tar.gz"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install necessary packages
+      apt:
+        name:
+          - apache2
+          - mysql-server
+          - php
+          - php-mysql
+          - libapache2-mod-php
+          - php-xml
+          - php-gd
+          - wget
+          - unzip
+          - python3-pymysql
+        state: present
+
+    - name: Start Apache service
+      service:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: Start MySQL service
+      service:
+        name: mysql
+        state: started
+        enabled: yes
+
+    - name: Set MySQL root password
+      mysql_user:
+        name: root
+        password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        check_implicit_admin: yes
+
+    - name: Remove anonymous MySQL users
+      mysql_user:
+        name: ""
+        host_all: yes
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Disallow root login remotely
+      mysql_user:
+        name: root
+        host: '%'
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Remove the MySQL test database
+      mysql_db:
+        name: test
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Create MySQL database for WordPress
+      mysql_db:
+        name: "{{ mysql_db }}"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Create MySQL user for WordPress
+      mysql_user:
+        name: "{{ mysql_user }}"
+        password: "{{ mysql_password }}"
+        priv: "{{ mysql_db }}.*:ALL"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Download WordPress
+      get_url:
+        url: "{{ wordpress_url }}"
+        dest: "/tmp/wordpress.tar.gz"
+
+    - name: Extract WordPress
+      unarchive:
+        src: "/tmp/wordpress.tar.gz"
+        dest: "/var/www/html/"
+        creates: "/var/www/html/wordpress"
+        remote_src: yes
+
+    - name: Copy sample WordPress config to wp-config.php
+      ansible.builtin.copy:
+        src: "/var/www/html/wordpress/wp-config-sample.php"
+        dest: "/var/www/html/wordpress/wp-config.php"
+        force: no
+        remote_src: yes
+
+    - name: Change ownership of WordPress files
+      ansible.builtin.file:
+        path: "/var/www/html/wordpress"
+        state: directory
+        owner: www-data
+        group: www-data
+        recurse: yes
+
+    - name: Update WordPress config file with database settings
+      ansible.builtin.lineinfile:
+        path: "/var/www/html/wordpress/wp-config.php"
+        regexp: "^define\\('{{ item.param }}',\\s*'[^']*'\\);"
+        line: "define('{{ item.param }}', '{{ item.value }}');"
+      loop:
+        - { param: 'DB_NAME', value: "{{ mysql_db }}" }
+        - { param: 'DB_USER', value: "{{ mysql_user }}" }
+        - { param: 'DB_PASSWORD', value: "{{ mysql_password }}" }
+        - { param: 'DB_HOST', value: "localhost" }
+
+
+  handlers:
+    - name: restart apache2
+      ansible.builtin.service:
+        name: apache2
+        state: restarted
+
